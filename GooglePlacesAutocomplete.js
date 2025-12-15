@@ -1109,7 +1109,8 @@ export const GooglePlacesAutocomplete = forwardRef((props, ref) => {
     ref,
     () => ({
       setAddressText: (address) => {
-        setStateText(address);
+        _handleChangeText(address);
+        setListViewDisplayed(true);
       },
       getAddressText: () => stateText,
       blur: () => inputRef.current?.blur(),
