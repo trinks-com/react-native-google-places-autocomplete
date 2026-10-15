@@ -144,6 +144,9 @@ export const GooglePlacesAutocomplete = forwardRef((props, ref) => {
 
   // Store active XMLHttpRequest objects - needed to abort requests when component unmounts or new search starts
   const requestsRef = useRef([]);
+  // Place Details request, kept apart from requestsRef so that text changes while it loads
+  // (e.g. iOS autocorrect applied on keyboard dismiss) don't abort the user's selection
+  const detailsRequestRef = useRef(null);
 
   // Track if navigator warning has been shown - prevents duplicate console warnings
   const hasWarnedAboutNavigator = useRef(false);
@@ -239,6 +242,19 @@ export const GooglePlacesAutocomplete = forwardRef((props, ref) => {
     });
     requestsRef.current = [];
   }, []);
+
+  const _abortDetailsRequest = useCallback(() => {
+    const request = detailsRequestRef.current;
+    if (request) {
+      request.onreadystatechange = null;
+      request.abort();
+      detailsRequestRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => _abortDetailsRequest();
+  }, [_abortDetailsRequest]);
 
   // ==========================================================================
   // DATA PROCESSING FUNCTIONS
@@ -549,7 +565,7 @@ export const GooglePlacesAutocomplete = forwardRef((props, ref) => {
           `${url}/place/autocomplete/json?input=` +
             encodeURIComponent(text) +
             '&' +
-            Qs.stringify(query),
+            Qs.stringify({ sessiontoken: sessionToken, ...query }),
         );
       }
 
@@ -671,8 +687,9 @@ export const GooglePlacesAutocomplete = forwardRef((props, ref) => {
       _enableRowLoader(rowData);
 
       // fetch details
+      _abortDetailsRequest();
       const request = new XMLHttpRequest();
-      requestsRef.current.push(request);
+      detailsRequestRef.current = request;
       request.timeout = timeout;
       request.ontimeout = onTimeout;
       request.onreadystatechange = () => {
@@ -740,9 +757,12 @@ export const GooglePlacesAutocomplete = forwardRef((props, ref) => {
               key: query.key,
               placeid: rowData.place_id,
               language: query.language,
+              sessiontoken: sessionToken,
               ...GooglePlacesDetailsQuery,
             }),
         );
+        // Place Details ends the session; the next search needs a new token
+        setSessionToken(uuid.v4());
       }
 
       request.withCredentials = requestShouldUseWithCredentials();
